@@ -19,13 +19,4 @@ Enriquecimiento con información pública de empresa (nombre, tamaño, industria
 Almacenamiento estructurado para análisis posterior.
 Reporte automático de tendencias y crecimiento de demanda.
 
-Requerimientos técnicos
-Lenguaje sugerido: Python (Scrapy, BeautifulSoup, Selenium).
-Integración con base de datos Supabase o MongoDB.
-Programación de scraping con control de frecuencia.
-Pipeline ETL con limpieza y normalización.
 
-Entregables esperados
-Dataset de 500 registros procesados.
-Script documentado y automatizable.
-Reporte de insights en notebook o dashboard.
