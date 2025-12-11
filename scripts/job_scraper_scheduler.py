@@ -1,129 +1,155 @@
 import os
+import schedule
 import time
 import logging
-import nbformat
-from nbconvert.preprocessors import ExecutePreprocessor
-import schedule
 from datetime import datetime
+import papermill as pm
 
-# CONFIGURACIÓN DE LOGS
+# Configuración de logging
 logging.basicConfig(
-    filename="scheduler_logs.log",
     level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s"
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler("scraper_scheduler.log"),
+        logging.StreamHandler()
+    ]
 )
 
-
-def execute_notebook(notebook_path):
-    """Ejecuta un notebook de Jupyter programáticamente usando nbconvert"""
+def run_notebook(notebook_path, output_dir=None, parameters=None):
+    """
+    Ejecuta un notebook de Jupyter usando Papermill.
+    
+    Args:
+        notebook_path (str): Ruta al notebook de entrada
+        output_dir (str, optional): Directorio para guardar el notebook ejecutado
+        parameters (dict, optional): Parámetros para inyectar al notebook
+    
+    Returns:
+        tuple: (éxito, ruta_del_archivo_ejecutado)
+    """
     try:
-        print(f"📖 Cargando notebook desde: {notebook_path}")
+        # Configurar directorio de salida
+        if output_dir is None:
+            output_dir = os.path.join(
+                os.path.dirname(notebook_path),
+                "executed_notebooks"
+            )
         
-        # Configuración del ejecutor
-        ep = ExecutePreprocessor(
-            timeout=600,  # 10 minutos de timeout
-            kernel_name='market_scrapper_kernel',
-            allow_errors=True,
-            interrupt_on_timeout=True
+        os.makedirs(output_dir, exist_ok=True)
+        
+        # Nombre del archivo de salida
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        output_path = os.path.join(
+            output_dir,
+            f"executed_{os.path.basename(notebook_path).replace('.ipynb', '')}_{timestamp}.ipynb"
         )
         
-        # Ruta de salida para el notebook ejecutado
-        notebook_dir = os.path.dirname(notebook_path)
-        notebook_name = os.path.basename(notebook_path)
-        output_path = os.path.join(notebook_dir, f"executed_{notebook_name}")
+        logging.info(f"📖 Ejecutando notebook: {notebook_path}")
+        logging.info(f"💾 Guardando salida en: {output_path}")
         
-        print("⚙️  Configurando el entorno de ejecución...")
-        print(f"   - Directorio de trabajo: {notebook_dir}")
-        print(f"   - Kernel: python3")
+        # Ejecutar el notebook
+        pm.execute_notebook(
+            notebook_path,
+            output_path,
+            parameters=parameters or {},
+            kernel_name='python3'
+        )
         
-        # Leer el notebook
-        with open(notebook_path, 'r', encoding='utf-8') as f:
-            nb = nbformat.read(f, as_version=4)
-        
-        print("▶️  Iniciando ejecución del notebook...")
-        start_time = time.time()
-        
-        try:
-            # Ejecutar el notebook completo
-            ep.preprocess(nb, {'metadata': {'path': notebook_dir}})
-            
-            # Guardar el notebook ejecutado
-            with open(output_path, 'w', encoding='utf-8') as f:
-                nbformat.write(nb, f)
-            
-            print(f"✅ Notebook ejecutado y guardado en: {output_path}")
-            return True
-            
-        except Exception as e:
-            print(f"❌ Error durante la ejecución: {str(e)}")
-            return False
+        logging.info("✅ Notebook ejecutado exitosamente")
+        return True, output_path
             
     except Exception as e:
-        error_msg = f"❌ Error crítico: {str(e)}"
-        print(error_msg)
+        error_msg = f"❌ Error al ejecutar el notebook: {str(e)}"
         logging.error(error_msg)
         import traceback
-        traceback.print_exc()
-        return False
-    finally:
-        execution_time = time.time() - start_time
-        print(f"⏱️  Tiempo de ejecución: {execution_time:.2f} segundos")
-
+        logging.error(traceback.format_exc())
+        return False, None
 
 def ejecutar_scraping():
+    """Función que será ejecutada por el scheduler"""
     print("\n" + "="*50)
-    print(f"🕒 Iniciando ejecución programada - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    logging.info("Inicio de ejecución automática del notebook de scraping")
+    start_time = datetime.now()
+    logging.info(f"🕒 Iniciando ejecución programada - {start_time.strftime('%Y-%m-%d %H:%M:%S')}")
     
-    # Ruta al notebook
-    notebook_path = os.path.join(
-        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),  # Go up one level from scripts/
-        "notebooks/01. job_scrapper.ipynb"
+    # Rutas
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    notebook_path = os.path.join(base_dir, "notebooks/01. job_scrapper.ipynb")
+    output_dir = os.path.join(base_dir, "executed_notebooks")
+    logs_dir = os.path.join(base_dir, "execution_logs")
+    
+    # Crear directorios si no existen
+    os.makedirs(output_dir, exist_ok=True)
+    os.makedirs(logs_dir, exist_ok=True)
+    
+    # Archivo de log para esta ejecución
+    log_file = os.path.join(
+        logs_dir,
+        f"scraper_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
     )
     
-    print(f"🔍 Buscando notebook en: {notebook_path}")
+    # Configurar file handler adicional
+    file_handler = logging.FileHandler(log_file)
+    file_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+    logging.getLogger().addHandler(file_handler)
     
-    if not os.path.exists(notebook_path):
-        error_msg = f"❌ No se encontró el notebook en: {notebook_path}"
-        logging.error(error_msg)
-        print(error_msg)
-        return
-
     try:
-        print("🚀 Iniciando ejecución del notebook...")
-        success = execute_notebook(notebook_path)
+        # Ejecutar el notebook
+        success, output_path = run_notebook(
+            notebook_path=notebook_path,
+            output_dir=output_dir,
+            parameters={
+                'execution_time': start_time.isoformat(),
+                'output_dir': output_dir
+            }
+        )
+        
         if success:
-            msg = "✨ Ejecución del notebook completada exitosamente"
-            logging.info(msg)
-            print(msg)
+            logging.info(f"📊 Resultados guardados en: {output_path}")
         else:
-            error_msg = "❌ Error al ejecutar el notebook, revisa los logs"
-            logging.error(error_msg)
-            print(error_msg)
+            logging.error("❌ Falló la ejecución del notebook")
             
     except Exception as e:
-        error_msg = f"❌ Error inesperado: {str(e)}"
-        logging.error(error_msg)
-        print(error_msg)
+        logging.error(f"❌ Error inesperado: {str(e)}")
+        import traceback
+        logging.error(traceback.format_exc())
+    
     finally:
-        print(f"🏁 Finalizado - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        # Cerrar y remover el file handler
+        file_handler.close()
+        logging.getLogger().removeHandler(file_handler)
+        
+        execution_time = (datetime.now() - start_time).total_seconds()
+        logging.info(f"🏁 Finalizado en {execution_time:.2f} segundos")
         print("="*50 + "\n")
 
-
-
-# Programar la ejecución diaria a las 9:00 AM
-schedule.every().day.at("09:55").do(ejecutar_scraping)
-
-# Para pruebas, puedes descomentar esta línea para ejecutar cada minuto
-# schedule.every(1).minutes.do(ejecutar_scraping)
-
-if __name__ == "__main__":
-    print("Scheduler iniciado. Presiona CTRL + C para detener.")
-    print(f"Se ejecutará el notebook: notebooks/01. job_scrapper.ipynb")
+def setup_scheduler():
+    """Configura el programador de tareas"""
+    # Ejecutar todos los días a las 9:00 AM
+    schedule.every().day.at("10:08").do(ejecutar_scraping).tag('daily_scraping')
+    
+    # Para pruebas: ejecutar cada 1 minuto
+    # schedule.every(1).minutes.do(ejecutar_scraping).tag('test_run')
     
     # Ejecutar inmediatamente al inicio (opcional)
     # ejecutar_scraping()
+
+if __name__ == "__main__":
+    print("="*50)
+    print("🚀 Iniciando Scheduler de Scraping")
+    print(f"🕒 Hora actual: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    print("Presiona Ctrl+C para detener")
+    print("="*50)
     
-    while True:
-        schedule.run_pending()
-        time.sleep(1)
+    setup_scheduler()
+    
+    try:
+        while True:
+            schedule.run_pending()
+            time.sleep(1)
+    except KeyboardInterrupt:
+        print("\nDeteniendo el scheduler...")
+        schedule.clear()
+        print("Scheduler detenido correctamente")
+    except Exception as e:
+        logging.error(f"Error en el scheduler: {str(e)}")
+        raise
