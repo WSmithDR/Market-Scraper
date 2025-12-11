@@ -122,16 +122,45 @@ def ejecutar_scraping():
         logging.info(f"🏁 Finalizado en {execution_time:.2f} segundos")
         print("="*50 + "\n")
 
+def get_valid_time():
+    """Solicita una hora válida al usuario"""
+    from datetime import datetime, time as dt_time, timedelta
+    
+    while True:
+        try:
+            time_str = input("\nIngrese la hora en formato 24h (HH:MM): ")
+            hour, minute = map(int, time_str.split(':'))
+            
+            if not (0 <= hour <= 23 and 0 <= minute <= 59):
+                print("Error: Hora inválida. Use formato 24h (00:00 - 23:59)")
+                continue
+                
+            now = datetime.now()
+            scheduled_time = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+            
+            if scheduled_time < now:
+                print(f"\n¡Atención! La hora ingresada ({time_str}) ya ha pasado hoy.")
+                print(f"El scraping se programará para mañana a las {time_str}.")
+                scheduled_time += timedelta(days=1)
+            
+            confirm = input(f"\n¿Desea programar el scraping para {scheduled_time.strftime('%Y-%m-%d %H:%M')}? (s/n): ").lower()
+            if confirm == 's':
+                return time_str
+                
+        except ValueError:
+            print("Formato inválido. Por favor use HH:MM (ej: 09:30 o 14:15)")
+
 def setup_scheduler():
     """Configura el programador de tareas"""
-    # Ejecutar todos los días a las 9:00 AM
-    schedule.every().day.at("10:08").do(ejecutar_scraping).tag('daily_scraping')
+    print("\n=== Configuración del Programador de Scraping ===")
+    print("Ingrese la hora en que desea que se ejecute el scraping diariamente.")
+    
+    time_str = get_valid_time()
+    schedule.every().day.at(time_str).do(ejecutar_scraping).tag('daily_scraping')
+    print(f"\n✓ Scraping programado para ejecutarse diariamente a las {time_str}")
     
     # Para pruebas: ejecutar cada 1 minuto
     # schedule.every(1).minutes.do(ejecutar_scraping).tag('test_run')
-    
-    # Ejecutar inmediatamente al inicio (opcional)
-    # ejecutar_scraping()
 
 if __name__ == "__main__":
     print("="*50)
