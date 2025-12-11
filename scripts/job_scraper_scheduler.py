@@ -15,27 +15,28 @@ logging.basicConfig(
     ]
 )
 
-def run_notebook(notebook_path, output_dir=None, parameters=None):
+def run_notebook(notebook_path, output_dir=None, logs_dir=None, parameters=None):
     """
     Ejecuta un notebook de Jupyter usando Papermill.
     
     Args:
         notebook_path (str): Ruta al notebook de entrada
         output_dir (str, optional): Directorio para guardar el notebook ejecutado
+        logs_dir (str, optional): Directorio para guardar los logs
         parameters (dict, optional): Parámetros para inyectar al notebook
     
     Returns:
         tuple: (éxito, ruta_del_archivo_ejecutado)
     """
     try:
-        # Configurar directorio de salida
+        # Configurar directorios
         if output_dir is None:
-            output_dir = os.path.join(
-                os.path.dirname(notebook_path),
-                "executed_notebooks"
-            )
+            output_dir = os.path.join(os.path.dirname(notebook_path), "executed_notebooks")
+        if logs_dir is None:
+            logs_dir = os.path.join(os.path.dirname(notebook_path), "execution_logs")
         
         os.makedirs(output_dir, exist_ok=True)
+        os.makedirs(logs_dir, exist_ok=True)
         
         # Nombre del archivo de salida
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
@@ -47,24 +48,34 @@ def run_notebook(notebook_path, output_dir=None, parameters=None):
         logging.info(f"📖 Ejecutando notebook: {notebook_path}")
         logging.info(f"💾 Guardando salida en: {output_path}")
         
-        # Ejecutar el notebook
-        pm.execute_notebook(
-            notebook_path,
-            output_path,
-            parameters=parameters or {},
-            kernel_name='python3'
-        )
+        # Configurar archivos de log
+        stdout_path = os.path.join(logs_dir, f"stdout_{timestamp}.log")
+        stderr_path = os.path.join(logs_dir, f"stderr_{timestamp}.log")
+        
+        # Abrir archivos de log
+        with open(stdout_path, 'w') as stdout_file, open(stderr_path, 'w') as stderr_file:
+            # Ejecutar el notebook
+            pm.execute_notebook(
+                notebook_path,
+                output_path,
+                parameters=parameters or {},
+                kernel_name='python3',
+                log_output=True,
+                progress_bar=True,
+                stdout_file=stdout_file,
+                stderr_file=stderr_file,
+            )
         
         logging.info("✅ Notebook ejecutado exitosamente")
         return True, output_path
-            
+        
     except Exception as e:
         error_msg = f"❌ Error al ejecutar el notebook: {str(e)}"
         logging.error(error_msg)
         import traceback
         logging.error(traceback.format_exc())
         return False, None
-
+             
 def ejecutar_scraping():
     """Función que será ejecutada por el scheduler"""
     print("\n" + "="*50)
@@ -97,11 +108,12 @@ def ejecutar_scraping():
         success, output_path = run_notebook(
             notebook_path=notebook_path,
             output_dir=output_dir,
+            logs_dir=logs_dir,  # Add this line
             parameters={
                 'execution_time': start_time.isoformat(),
                 'output_dir': output_dir
             }
-        )
+)
         
         if success:
             logging.info(f"📊 Resultados guardados en: {output_path}")
