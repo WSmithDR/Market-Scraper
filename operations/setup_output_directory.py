@@ -1,7 +1,7 @@
 from datetime import datetime
 from pathlib import Path
 
-def setup_output_directory(base_dir="../data/raw"):
+def setup_output_directory(base_dir:str):
     """
     Crea un directorio de salida con timestamp (usando pathlib) 
     y devuelve un objeto Path.
